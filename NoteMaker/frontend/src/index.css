@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #faf7f0;
+    color: #1a1208;
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+  }
+}
