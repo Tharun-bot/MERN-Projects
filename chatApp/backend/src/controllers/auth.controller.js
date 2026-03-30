@@ -1,87 +1,95 @@
-import bcrypt, { genSalt } from "bcryptjs";
+import bcrypt from "bcryptjs"
 import User from "../models/auth.model.js";
-import { generateToken } from "../lib/utils.js";
+import { generateJWTToken } from "../lib/utils.js";
 import cloudinary from "../lib/cloudinary.js";
 
 export const signUpController = async (req, res) => {
-    try {
-        const {fullName, email, password} = req.body;
-    if(!fullName || !email || !password){
-      return res.status(400).json({message: "Invalid Credentails"});
+  try {
+    const {firstName, password, email} = req.body;
+    if(!firstName || !password || !email){
+      return res.status(400).json({message: "Inadequate credentials"});
     }
-    const user = await User.findOne({email});
-    if(user){
-      return res.status(400).json({message: "User already exists"});
+    if(await User.findOne({email})){
+      return res.status(400).json({message: "Email already exists"})
     }
     if(password.length < 6){
-      return res.status(400).json({message: "Password must be atleast 6 characters long"});
+      return res.status(400).json({message: "Password must be atleast 6 characters"});
     }
-    //hash the password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
-    const newUser = new User({
-      fullName, 
-      email,
-      "password": hashedPassword
-    })
-
+    const salt = await bcrypt.genSalt(10); //same as hash
+    console.log("salt : ", salt);
+    const hashedPassword = await bcrypt.hash(password, salt); //its a promise, must be resolved, use await
+    console.log("hashed : ", hashedPassword);
     if(hashedPassword){
-      generateToken(newUser._id, res);
-      await newUser.save();
-    }
+      const user = new User({
+        email, firstName, password: hashedPassword
+      });
+      generateJWTToken(res, user._id);
+      await user.save(); //must be awaited
 
-    res.status(201).json(newUser);
-  } catch (error) {
-    res.status(400).json({message : "Problem in loginController"});
-    console.log("Error : ", error);
+      res.status(201).json({message: user});
   }
-}
-
-export const logoutController = (req, res) => {
-  try {
-    res.cookie("jwt", "", {maxAge: 0})
   } catch (error) {
-    return res.status(400).json({message: "Error in logging out"})
-    console.log("Error : ", error);
+    console.error("Error : ", error.message)
+    res.status(400).json({message: "Error in signup controller"})
   }
-}
+};
 
 export const loginController = async (req, res) => {
-  const {email, password} = req.body;
   try {
+    const {email, password} = req.body;
+
     if(!email || !password){
-      return res.status(400).json({message: "Invalid Credentials"});
+      return res.status(400).json({message: "Insufficient Credentials"});
     }
     const user = await User.findOne({email});
     if(!user){
-      return res.status(400).json({message: "Invalid Credentials"});
+      return res.status(400).json({message: "User Does not exists"});
     }
+
     const isPasswordCorrect = await bcrypt.compare(password, user.password);
     if(!isPasswordCorrect){
       return res.status(400).json({message: "Invalid Credentials"});
     }
-    generateToken(user._id, res);
-    res.status(200).json({message: "User logged in successfully"});
+    generateJWTToken(res, user._id);
+    res.status(200).json({
+      "id" : user._id,
+      email,
+      "firstName" : user.firstName,
+      "profilePic" : user.profilePic
+    })
+
   } catch (error) {
-    res.status(400).json({message: "Error in loginController"});
+    console.error("Error : ", error.body);
+    res.status(500).json({message: "Problem in login controller"});
+    
+  }
+
+
+};
+
+export const logoutController = async (req, res) => {
+  try {
+    res.cookie("jwt", "", {maxAge : 0});
+    res.status(200).json({message : "Loogged Out Successfully"});
+  } catch (error) {
+    console.log("Error in logout controller", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const updateProfilePic = async (req, res) => { 
+  try {
+    const {profilePic} = req.body;
+    if(!profilePic){
+      return res.status(400).json({message : "Image not uploaded"})
+    }
+    const uploadImageToCloudinary = await cloudinary.uploader.upload(profilePic);
+    const updatedUserEntry = await User({
+      profilePic : uploadImageToCloudinary.secure_url
+    });
+    res.status(200).json(updatedUserEntry);
+  } catch (error) {
+    res.status(400).json({message : "Error in uploading image"});
     console.log("Error : ", error);
   }
 }
-
-export const updateProfilePic = async (req, res) => {
-  try {
-    const {profilePic} = req.body;
-    const {userId} = req.user._id;
-    if(!profilePic){
-      return res.status(40).json({message: "Profile pic not uploaded"});
-    }
-    const uploadResponse = await cloudinary.uploader.upload(profilePic);
-    const updateUser = await User.findByIdAndUpdate(userId, {profilePic : uploadResponse.secure_url}, {returnDocument: 'after'});
-    res.status(200).json(updateUser, {message: "Uploaded successfully"});
-  } catch (error) {
-    res.status(400).json({message: "Problem in uploading image"});
-    console.error("Error : ", error);
-  }
-}
-
