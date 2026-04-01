@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs"
 import User from "../models/auth.model.js";
 import { generateJWTToken } from "../lib/utils.js";
 import cloudinary from "../lib/cloudinary.js";
+import { protectedRoute } from "../middleware/auth.middleware.js";
 
 export const signUpController = async (req, res) => {
   try {
@@ -23,7 +24,7 @@ export const signUpController = async (req, res) => {
       const user = new User({
         email, firstName, password: hashedPassword
       });
-      generateJWTToken(res, user._id);
+      generateJWTToken(user._id, res);
       await user.save(); //must be awaited
 
       res.status(201).json({message: user});
@@ -50,7 +51,7 @@ export const loginController = async (req, res) => {
     if(!isPasswordCorrect){
       return res.status(400).json({message: "Invalid Credentials"});
     }
-    generateJWTToken(res, user._id);
+    generateJWTToken(user._id, res);
     res.status(200).json({
       "id" : user._id,
       email,
@@ -63,8 +64,6 @@ export const loginController = async (req, res) => {
     res.status(500).json({message: "Problem in login controller"});
     
   }
-
-
 };
 
 export const logoutController = async (req, res) => {
@@ -93,3 +92,12 @@ export const updateProfilePic = async (req, res) => {
     console.log("Error : ", error);
   }
 }
+
+export const checkAuth = (req, res) => {
+  try {
+    res.status(200).json(req.user);
+  } catch (error) {
+    console.log("Error in checkAuth controller", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
